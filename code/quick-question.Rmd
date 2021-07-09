@@ -1,0 +1,262 @@
+---
+title: "Quick R Question"
+author: "R. Noah Padgett"
+date: "5/26/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+1. Using the "priority_data" file, use the variables 'coll_m06_ffq', and all '*_stool' variables to identify how many patients (participant_id) provided data for the FFQ and any stool timepoint (the codebook is "Copy of ColoCare_PriorityVar_Sharepoint_v2.4_20210310")
+
+2. Using the "map_minimal" file, and ColocareID var, use the variable 'timepoint' to find out how many patients provided 
+
+    i. Only one stool at baseline 
+    
+    ii. Both stools at baseline and at 6 months
+
+# Packages
+
+```{r packages, warning=F, error=F, message=F}
+
+packages <- c(
+  "tidyverse", "readxl", "kableExtra"
+)
+new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+# Load packages
+lapply(packages, library, character.only = TRUE)
+
+w.d <- getwd()
+
+```
+
+# Data
+
+```{r data, warning=FALSE, error=F, message=F}
+# Priority data
+priority_data <- read_xlsx("LGreathouse_Priority_Data.xlsx") 
+# mapping data
+map_min <- read.table("16S data/map_minimal.txt", header=T)
+```
+
+# 1. FFQ and Stool Data
+
+1. Using the "priority_data" file, use the variables 'coll_m06_ffq', and all '*_stool' variables to identify how many patients (participant_id) provided data for the FFQ and any stool timepoint (the codebook is "Copy of ColoCare_PriorityVar_Sharepoint_v2.4_20210310")
+
+
+The code below finds the number of responses per variable.
+
+```{r}
+myVar <- c("coll_m06_ffq", grep("_stool$", colnames(priority_data),value = T))
+
+
+NnN <- list(
+  N.Response = ~ n() - sum(is.na(.x)), 
+  N.NA = ~ sum(is.na(.x))
+)
+A <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  select(all_of(myVar)) %>%
+  mutate(coll_m06_ffq = as.numeric(coll_m06_ffq)) %>%
+  summarise(across(everything(),NnN)) %>%
+  pivot_longer(
+    cols=everything(),
+    names_to = "output",
+    values_to = "count"
+  )
+
+A <- data.frame(
+  variable = myVar,
+  N.Respond = A[seq(1,9, 2),2], 
+  N.NA = A[seq(2, 10, 2),2])
+colnames(A) <- c("variable", "N.Respond", "N.NA")
+kable(A, format="html") %>% kable_styling(full_width = T)
+```
+
+## Responses to FFQ and Stool Data
+
+```{r}
+
+f <- list(x = ~ifelse(is.na(.x), 0, 1))
+dat <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  select(all_of(myVar), participant_id) %>%
+  mutate(across(all_of(myVar), f)) %>%
+  mutate(
+    any.stool = coll_baseline_stool_x+coll_m06_stool_x+coll_m12_stool_x+coll_m24_stool_x,
+    any.stool = ifelse(any.stool > 0, "Has some stool data", "Has NO stool data"),
+    FFQ = ifelse(coll_m06_ffq_x == 1, "Has FFQ Data", "Does NOT have FFQ Data")
+  ) %>%
+  group_by(FFQ, any.stool) %>%
+  summarise(Frequency=n())
+
+kable(dat, format="html") %>%
+  kable_styling(full_width = T)
+
+```
+
+So, __338__ patients have recorded data for the FFQ and a stool measurement at any timepoint.
+
+# 2. Timepoint and ColocareID mapping
+
+2. Using the "map_minimal" file, and ColocareID var, use the variable 'timepoint' to find out how many patients provided 
+
+## i. Only one stool at baseline 
+    
+```{r}
+map_min %>%
+  filter(Timepoint == "Baseline")%>%
+  summarise(N = length(unique(ColocareID)))
+```
+
+## ii. Both stools at baseline and at 6 months
+    
+```{r}
+map_min %>%
+  filter(Timepoint %in% c("Baseline", "6.Month"))%>%
+  group_by(ColocareID) %>%
+  mutate(N = n()) %>%
+  ungroup() %>%
+  filter(N==2)%>%
+  summarise(N = length(unique(ColocareID)))
+```
+
+Therefore, __112__ patients have data at baseline and 6.months.
+
+
+# FFQ, Baseline and 6months
+
+```{r}
+# rename id variable
+map_min <- map_min %>%
+  mutate(participant_id = ColocareID)
+# merge into 1 data.frame
+p.dat <- priority_data %>% filter(Module == "participant_overview")
+merge_dat <- full_join(map_min, p.dat)
+# compute identifier (Stool) for whether the patient has baseline and 6.Month 16S data
+dat <- merge_dat %>%
+  mutate(ffq.na = ifelse(is.na(coll_m06_ffq), 0, 1))%>%
+  select(participant_id, Timepoint, ffq.na) %>%
+  group_by(participant_id) %>%
+  mutate(N = n()) %>%
+  ungroup()%>%
+  mutate(
+    Stool = ifelse(N==2, "Has Stool samples at Baseline & 6.Months", "Does NOT have Stool samples at Baseline & 6.Months"),
+    FFQ = ifelse(ffq.na == 1, "Has FFQ Data", "Does NOT have FFQ Data")) %>%
+  group_by(Stool, FFQ) %>%
+  summarise(Frequency = length(unique(participant_id)))
+
+
+kable(dat, format="html") %>%
+  kable_styling(full_width = T)
+```
+
+Therefore, only __2__ patients have FFQ and 16S Stool data at baseline and 6.months.
+
+
+# Question 2.
+
+## Part a. 
+
+Of those people with stool data at baseline and/or 6 months, how many have recurrence data (b_recurrence_new_mets_yn)
+
+```{r}
+
+table(priority_data$Module, priority_data$b_recurrence_new_mets_yn)
+
+table(priority_data$Module, priority_data$coll_baseline_stool)
+
+```
+
+
+```{r}
+myVar <- c("coll_m06_ffq", grep("_stool$", colnames(priority_data), value = T))
+
+# need to merge index_cancer_overview with participant overview
+dat1 <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  select(all_of(myVar), participant_id)
+dat2 <- priority_data %>%
+  filter(Module == "index_cancer_overview") %>%
+  select(participant_id, b_recurrence_new_mets_yn)
+dat <- full_join(dat1, dat2)
+
+
+
+f <- list(x = ~ifelse(is.na(.x), 0, 1))
+dat <- dat %>%
+  mutate(
+    across(all_of(myVar), f),
+    b6.stool = coll_baseline_stool_x+coll_m06_stool_x,
+    b6.stool = ifelse(b6.stool > 0, "Has Stool samples at Baseline & 6.Months", "Does NOT have Stool samples at Baseline & 6.Months"),
+  )
+
+dat$b_recurrence_new_mets_yn[is.na(dat$b_recurrence_new_mets_yn)==TRUE] <- -99
+
+dat$Recurr <- factor(dat$b_recurrence_new_mets_yn, levels=c(0,1,99,-99),
+                     labels=c("b_recurrence_new_mets_yn==0",
+                              "b_recurrence_new_mets_yn==1",
+                              "b_recurrence_new_mets_yn==99",
+                              "b_recurrence_new_mets_yn IS MISSING"))
+  
+dat.sum <- dat %>%
+  group_by(Recurr, b6.stool) %>%
+  summarise(Frequency=n())
+
+kable(dat.sum, format="html") %>%
+  kable_styling(full_width = T)
+
+```
+
+
+## Part b.
+
+Of those people with stool data at baseline and/or 6 months, how many died (o_vital_status)
+
+```{r}
+
+table(priority_data$Module, priority_data$o_vital_status)
+
+```
+
+
+```{r}
+myVar <- c("coll_m06_ffq", grep("_stool$", colnames(priority_data), value = T))
+
+# need to merge index_cancer_overview with participant overview
+dat1 <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  select(all_of(myVar), participant_id)
+dat2 <- priority_data %>%
+  filter(Module == "mr_participant_overview") %>%
+  select(participant_id, o_vital_status)
+dat <- full_join(dat1, dat2)
+
+
+
+f <- list(x = ~ifelse(is.na(.x), 0, 1))
+dat <- dat %>%
+  mutate(
+    across(all_of(myVar), f),
+    b6.stool = coll_baseline_stool_x+coll_m06_stool_x,
+    b6.stool = ifelse(b6.stool > 0, "Has Stool samples at Baseline & 6.Months", "Does NOT have Stool samples at Baseline & 6.Months"),
+  )
+
+dat$o_vital_status[is.na(dat$o_vital_status)==TRUE] <- -99
+
+dat$Vital <- factor(dat$o_vital_status, levels=c(0,1,-99),
+                     labels=c("Has died (o_vital_status==0)",
+                              "Has NOT died (o_vital_status==1)",
+                              "MISSING"))
+  
+dat.sum <- dat %>%
+  group_by(Vital, b6.stool) %>%
+  summarise(Frequency=n())
+
+kable(dat.sum, format="html") %>%
+  kable_styling(full_width = T)
+
+```

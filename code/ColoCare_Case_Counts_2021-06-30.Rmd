@@ -1,0 +1,140 @@
+---
+title: "ColoCare Case Counts"
+author: "R. Noah Padgett"
+date: "6/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+
+# Packages
+
+```{r packages, warning=F, error=F, message=F}
+
+packages <- c(
+  "tidyverse", "readxl", "kableExtra"
+)
+new.packages <- packages[!(packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+# Load packages
+lapply(packages, library, character.only = TRUE)
+
+w.d <- getwd()
+
+```
+
+# Data
+
+```{r data, warning=FALSE, error=F, message=F}
+# Priority data
+priority_data <- read_xlsx(paste0(w.d,"/data/LGreathouse_Priority_Data.xlsx") )
+# mapping data
+map_min <- read.table(paste0(w.d,"/data/16S data/map_minimal.txt"), header=T)
+```
+
+# Question 2.
+
+## Part a. 
+
+Of those people with stool data at baseline and/or 6 months, how many have recurrence data (b_recurrence_new_mets_yn)
+
+```{r}
+
+table(priority_data$Module, priority_data$b_recurrence_new_mets_yn)
+
+table(priority_data$Module, priority_data$coll_baseline_stool)
+
+```
+
+
+```{r}
+myVar <- c("coll_m06_ffq", grep("_stool$", colnames(priority_data), value = T))
+
+# need to merge index_cancer_overview with participant overview
+dat1 <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  select(all_of(myVar), participant_id)
+dat2 <- priority_data %>%
+  filter(Module == "index_cancer_overview") %>%
+  select(participant_id, b_recurrence_new_mets_yn)
+dat <- full_join(dat1, dat2)
+
+
+
+f <- list(x = ~ifelse(is.na(.x), 0, 1))
+dat <- dat %>%
+  mutate(
+    across(all_of(myVar), f),
+    b6.stool = coll_baseline_stool_x+coll_m06_stool_x,
+    b6.stool = ifelse(b6.stool > 0, "Has Stool samples at Baseline & 6.Months", "Does NOT have Stool samples at Baseline & 6.Months"),
+  )
+
+dat$b_recurrence_new_mets_yn[is.na(dat$b_recurrence_new_mets_yn)==TRUE] <- -99
+
+dat$Recurr <- factor(dat$b_recurrence_new_mets_yn, levels=c(0,1,99,-99),
+                     labels=c("b_recurrence_new_mets_yn==0",
+                              "b_recurrence_new_mets_yn==1",
+                              "b_recurrence_new_mets_yn==99",
+                              "b_recurrence_new_mets_yn IS MISSING"))
+  
+dat.sum <- dat %>%
+  group_by(Recurr, b6.stool) %>%
+  summarise(Frequency=n())
+
+kable(dat.sum, format="html") %>%
+  kable_styling(full_width = T)
+
+```
+
+
+## Part b.
+
+Of those people with stool data at baseline and/or 6 months, how many died (o_vital_status)
+
+```{r}
+
+table(priority_data$Module, priority_data$o_vital_status)
+
+```
+
+
+```{r}
+myVar <- c("coll_m06_ffq", grep("_stool$", colnames(priority_data), value = T))
+
+# need to merge index_cancer_overview with participant overview
+dat1 <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  select(all_of(myVar), participant_id)
+dat2 <- priority_data %>%
+  filter(Module == "mr_participant_overview") %>%
+  select(participant_id, o_vital_status)
+dat <- full_join(dat1, dat2)
+
+
+
+f <- list(x = ~ifelse(is.na(.x), 0, 1))
+dat <- dat %>%
+  mutate(
+    across(all_of(myVar), f),
+    b6.stool = coll_baseline_stool_x+coll_m06_stool_x,
+    b6.stool = ifelse(b6.stool > 0, "Has Stool samples at Baseline & 6.Months", "Does NOT have Stool samples at Baseline & 6.Months"),
+  )
+
+dat$o_vital_status[is.na(dat$o_vital_status)==TRUE] <- -99
+
+dat$Vital <- factor(dat$o_vital_status, levels=c(0,1,-99),
+                     labels=c("Has NOT died (o_vital_status==0)",
+                              "Has died (o_vital_status==1)",
+                              "MISSING"))
+  
+dat.sum <- dat %>%
+  group_by(Vital, b6.stool) %>%
+  summarise(Frequency=n())
+
+kable(dat.sum, format="html") %>%
+  kable_styling(full_width = T)
+
+```
