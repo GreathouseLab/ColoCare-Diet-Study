@@ -1,0 +1,154 @@
+---
+title: "ColoCare_Counts"
+author: "R. Noah Padgett"
+date: "7/3/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Phillips Results
+
+```{r}
+
+met = read.delim("map_minimal.txt", row.names = 1)
+met = met[,4:5]
+
+tmet = read.csv("LGreathouse_Priority_Data.csv")
+keep = c("participant_id", "b_recurrence_new_mets_yn", "o_vital_status")
+tmet = tmet[,names(tmet) %in% keep]
+names(tmet)[1] = "ColocareID"
+#most of the numeric IDs are found in both files (i.e. I think i am using the correct merge key)
+table(met$ColocareID %in% tmet$ColocareID)
+#but it appears that the patients that are in both do not have the phenotype data (i.e. they are blanks in these field in the original file)
+
+# match will check which IDs are the same in both datasets and return the row number in tmet that has a match in met,
+match(met$ColocareID, tmet$ColocareID)
+
+# if you use directly, will grab the row number/element number in matrix/vector that has ID matches
+# which are all NA
+table(tmet$o_vital_status[match(met$ColocareID, tmet$ColocareID)])
+table(tmet$b_recurrence_new_mets_yn[match(met$ColocareID, tmet$ColocareID)])
+# if you flip the match it is better because it will now return rows in tmet for which the ColocareID has a match in met
+table(tmet$o_vital_status[match(tmet$ColocareID, met$ColocareID)])
+table(tmet$b_recurrence_new_mets_yn[match(tmet$ColocareID, met$ColocareID)])
+
+
+# if you match the IDs and return the rows which IDs equal those in the above you get this
+tmet.match <- tmet[tmet$ColocareID %in% met$ColocareID,]
+
+table(tmet.match$b_recurrence_new_mets_yn)
+table(tmet.match$o_vital_status)
+
+```
+
+
+## Padgett Results
+
+
+```{r packages, warning=F, error=F, message=F}
+library("tidyverse")
+library("readxl")
+library("kableExtra")
+
+# Priority data
+priority_data <- read_xlsx("LGreathouse_Priority_Data.xlsx") 
+# mapping data
+map_min <- read.table("map_minimal.txt", header=T)
+
+
+table(map_min$ColocareID %in% priority_data$participant_id)
+
+```
+
+
+### b_recurrence_new_mets_yn
+
+```{r}
+
+table(priority_data$Module, priority_data$b_recurrence_new_mets_yn)
+
+# so return only those data from the index_cancer_overview rows
+dat <- priority_data %>%
+  filter(Module == "index_cancer_overview") %>%
+  select(participant_id, b_recurrence_new_mets_yn)
+
+table(dat$b_recurrence_new_mets_yn)
+
+# slowly go through each row to identify if the participant ID matched any of the IDs reported in the map_min data.
+dat$match <- 0 # column 3
+i <- 1
+for(i in 1:nrow(dat)){
+  dat[i,3] <- ifelse(dat[i,1] %in% map_min$ColocareID, 1, 0)
+}
+# or more quickly
+dat$match2 <- ifelse(dat$participant_id %in% map_min$ColocareID, 1, 0)
+# double check
+table(dat$match, dat$match2)
+
+
+# Add missing flag
+dat$b_recurrence_new_mets_yn[is.na(dat$b_recurrence_new_mets_yn)==TRUE] <- -99
+
+dat.sum <- dat %>%
+  group_by(b_recurrence_new_mets_yn, match) %>%
+  summarise(Frequency=n()) %>%
+  pivot_wider(
+    id_cols = "b_recurrence_new_mets_yn",
+    names_from = "match",
+    values_from = "Frequency"
+  )
+colnames(dat.sum) <- c("b_recurrence_new_mets_yn","Case ID NOT present in map_min", "Case ID Present in map_min")
+kable(dat.sum, format="html") %>%
+  kable_styling(full_width = T)
+```
+
+Therefore, there are 176 cases that have either 1 or 0 in recurr, and have 16S data.
+
+
+### o_vital_status
+
+```{r}
+
+table(priority_data$Module, priority_data$o_vital_status)
+
+# so return only those data from the index_cancer_overview rows
+dat <- priority_data %>%
+  filter(Module == "mr_participant_overview") %>%
+  select(participant_id, o_vital_status)
+
+table(dat$o_vital_status)
+
+# slowly go through each row to identify if the participant ID matched any of the IDs reported in the map_min data.
+dat$match <- 0 # column 3
+i <- 1
+for(i in 1:nrow(dat)){
+  dat[i,3] <- ifelse(dat[i,1] %in% map_min$ColocareID, 1, 0)
+}
+# or more quickly
+dat$match2 <- ifelse(dat$participant_id %in% map_min$ColocareID, 1, 0)
+# double check
+table(dat$match, dat$match2)
+
+
+# Add missing flag
+dat$o_vital_status[is.na(dat$o_vital_status)==TRUE] <- -99
+
+dat.sum <- dat %>%
+  group_by(o_vital_status, match) %>%
+  summarise(Frequency=n()) %>%
+  pivot_wider(
+    id_cols = "o_vital_status",
+    names_from = "match",
+    values_from = "Frequency"
+  )
+colnames(dat.sum) <- c("o_vital_status","Case ID NOT present in map_min", "Case ID Present in map_min")
+kable(dat.sum, format="html") %>%
+  kable_styling(full_width = T)
+```
+
+Therefore, there are 184 cases that have either 1 or 0 in vital, and have 16S data.
+
