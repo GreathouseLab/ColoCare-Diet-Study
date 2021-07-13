@@ -1,0 +1,53 @@
+---
+title: "Data Merging"
+author: "R. Noah Padgett"
+date: "6/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+
+source("code/load_packages.R")
+```
+
+# Data
+
+```{r data, warning=FALSE, error=F, message=F}
+# Priority data
+priority_data <- read_xlsx("data/LGreathouse_Priority_Data.xlsx") 
+# mapping data
+map_min <- read.table("data/map_minimal.txt", header=T)
+```
+
+# Question 2.
+
+
+```{r}
+
+table(priority_data$Module)
+
+
+table(priority_data$Module,priority_data$race)
+table(priority_data$Module,priority_data$o_vital_status)
+
+```
+
+FFQ, stool, 16S sequencing, recurrence, and survival, along with standard control variables, age, sex, race, stage of cancer diagnosis.
+
+
+```{r}
+myVar <- c("coll_m06_ffq", grep("_stool$", colnames(priority_data), value = T))
+
+# need to merge index_cancer_overview with participant overview
+dat1 <- priority_data %>%
+  filter(Module == "participant_overview") %>%
+  dplyr::select(all_of(myVar), participant_id)
+dat2 <- priority_data %>%
+  filter(Module == "index_cancer_overview") %>%
+  dplyr::select(participant_id, b_recurrence_new_mets_yn)
+# join data back together
+dat <- full_join(dat1, dat2, by="participant_id")
+
+```
+
